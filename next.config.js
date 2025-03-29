@@ -1,10 +1,7 @@
-import next from "next";
-const { NextConfig } = next;
-
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  env: {
-    OPENWEATHER_API_KEY: process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY,
-  },
-};
+  reactStrictMode: true,
+  swcMinify: true
+}
 
-export default nextConfig;
+module.exports = nextConfig
