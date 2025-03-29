@@ -1,0 +1,17 @@
+#Github Actionsのスケジュール機能
+
+#https://your-app.vercel.app/api/fetchWeatherにGETを送ればOpenWeatherからデータを取得しsupabaseに格納される
+#これをGithub Acitonsで10分毎に実行することができる。
+
+name: Run Weather Update Every 10 Minutes
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # 10分ごと
+  workflow_dispatch:  # 手動実行も可能。Githubリポジトリの、ActionsタブからRun Workflowを押すと手動実行可能。
+
+jobs:
+  update_weather:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Vercel API
+        run: curl -X GET "https://your-app.vercel.app/api/fetchWeather"
