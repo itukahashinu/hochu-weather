@@ -64,7 +64,7 @@ const getWindDirection = (deg: number) => {
 
 const WeatherCard = ({ data }: { data: WeatherData }) => {
     return (
-        <div className="flex-shrink-0 w-[400px] bg-zinc-900 rounded-xl overflow-hidden shadow-2xl border-2 border-zinc-800 transform transition-all duration-300 hover:scale-[1.02] hover:shadow-blue-900/20 hover:border-zinc-700 snap-center select-none">
+        <div className="flex-shrink-0 w-[400px] bg-zinc-900 rounded-xl overflow-hidden shadow-2xl border-2 border-zinc-800 transition-colors duration-300 hover:shadow-blue-900/20 hover:border-zinc-700 snap-center select-none">
             <div className="p-6">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-zinc-800">
                     <h2 className="text-2xl font-bold text-white">{data.cities.name}</h2>
