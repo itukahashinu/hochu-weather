@@ -1,5 +1,6 @@
 import '@/styles/globals.css'
 import type { AppProps } from 'next/app'
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 // Web3関連のエラーを防ぐためのパッチ
 if (typeof window !== 'undefined' && !window.ethereum) {
