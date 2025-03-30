@@ -2,25 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Head from "next/head";
 import WeatherCard from "@/components/WeatherCard";
-
-interface WeatherData {
-    city_id: number;
-    recorded_at: string;
-    temp: number;
-    feels_like: number;
-    temp_min: number;
-    temp_max: number;
-    pressure: number;
-    humidity: number;
-    wind_speed: number;
-    wind_deg: number;
-    cloudiness: number;
-    visibility: number;
-    weather_main: string;
-    sunrise: string;
-    sunset: string;
-    cities: { name: string; latitude: number; longitude: number };
-}
+import { WeatherData } from "@/types/weather";
 
 const Home = () => {
     const [weatherData, setWeatherData] = useState<WeatherData[]>([]);
@@ -31,7 +13,14 @@ const Home = () => {
         try {
             const { data, error } = await supabase
                 .from("weather_data")
-                .select("*, cities (name, latitude, longitude)")
+                .select(`
+                    *,
+                    cities (
+                        name,
+                        latitude,
+                        longitude
+                    )
+                `)
                 .order("recorded_at", { ascending: false });
 
             if (error) throw new Error(`Failed to fetch: ${error.message}`);

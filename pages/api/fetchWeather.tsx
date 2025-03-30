@@ -1,166 +1,124 @@
+// pages/api/fetchWeather.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/lib/supabaseClient";
 
-interface WeatherData {
-    coord: { lon: number; lat: number };
-    weather: { id: number; main: string; description: string; icon: string }[];
-    main: {
-        temp: number;
-        feels_like: number;
-        temp_min: number;
-        temp_max: number;
-        pressure: number;
-        humidity: number;
-    };
-    visibility: number;
-    wind: { speed: number; deg: number };
-    clouds: { all: number };
-    sys: {
-        sunrise: number;
-        sunset: number;
-        country: string;
-    };
-    timezone: number;
-    name: string;
+interface OpenWeatherResponse {
+  weather: [{
+    id: number;
+    main: string;
+    description: string;
+    icon: string;
+  }];
+  main: {
+    temp: number;
+    feels_like: number;
+    temp_min: number;
+    temp_max: number;
+    pressure: number;
+    humidity: number;
+  };
+  visibility: number;
+  wind: {
+    speed: number;
+    deg: number;
+  };
+  clouds: {
+    all: number;
+  };
+  sys: {
+    sunrise: number;
+    sunset: number;
+    country: string;
+  };
+  dt: number;
+  name: string;
 }
 
-const fetchWeatherData = async (lat: number, lon: number): Promise<WeatherData | null> => {
-    try {
-        console.log(`Fetching weather for lat:${lat}, lon:${lon}`);
-        const response = await fetch(
-            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${process.env.OPENWEATHER_API_KEY}&units=metric`
-        );
-        if (!response.ok) {
-            throw new Error(`Failed to fetch weather data: ${response.statusText}`);
-        }
-        const data = await response.json();
-        console.log(`Weather data fetched for ${data.name}:`, data);
-        return data as WeatherData;
-    } catch (error) {
-        console.error(`Error fetching weather data for lat:${lat}, lon:${lon}`, error);
-        return null;
-    }
-};
+async function fetchWeatherData(lat: number, lon: number): Promise<OpenWeatherResponse> {
+  const response = await fetch(
+    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${process.env.OPENWEATHER_API_KEY}&units=metric`
+  );
+  if (!response.ok) throw new Error(`Failed to fetch weather data: ${response.statusText}`);
+  return response.json() as Promise<OpenWeatherResponse>;
+}
 
-const insertWeatherDataToSupabase = async (weatherData: WeatherData, cityId: number) => {
-    const payload = {
-        city_id: cityId,
-        recorded_at: new Date().toISOString(),
-        temp: Math.min(Math.max(weatherData.main.temp, -999.99), 999.99),
-        feels_like: Math.min(Math.max(weatherData.main.feels_like, -999.99), 999.99),
-        temp_min: Math.min(Math.max(weatherData.main.temp_min, -999.99), 999.99),
-        temp_max: Math.min(Math.max(weatherData.main.temp_max, -999.99), 999.99),
-        pressure: weatherData.main.pressure,
-        humidity: weatherData.main.humidity,
-        wind_speed: Math.min(Math.max(weatherData.wind.speed, -999.99), 999.99),
-        wind_deg: weatherData.wind.deg,
-        cloudiness: weatherData.clouds.all,
-        visibility: weatherData.visibility,
-        weather_main: weatherData.weather[0].main,
-        sunrise: new Date(weatherData.sys.sunrise * 1000).toISOString(),
-        sunset: new Date(weatherData.sys.sunset * 1000).toISOString(),
-    };
+async function updateWeatherData(weatherData: OpenWeatherResponse, cityId: number) {
+  const now = new Date().toISOString();
+  const payload = {
+    city_id: cityId,
+    recorded_at: now,
+    name: weatherData.name,
+    temp: weatherData.main.temp,
+    feels_like: weatherData.main.feels_like,
+    temp_min: weatherData.main.temp_min,
+    temp_max: weatherData.main.temp_max,
+    pressure: weatherData.main.pressure,
+    humidity: weatherData.main.humidity,
+    wind_speed: weatherData.wind.speed,
+    wind_deg: weatherData.wind.deg,
+    cloudiness: weatherData.clouds.all,
+    visibility: weatherData.visibility,
+    weather_main: weatherData.weather[0].main,
+    weather_description: weatherData.weather[0].description,
+    weather_icon: weatherData.weather[0].icon,
+    sunrise: new Date(weatherData.sys.sunrise * 1000).toISOString(),
+    sunset: new Date(weatherData.sys.sunset * 1000).toISOString(),
+    country: weatherData.sys.country,
+    dt: weatherData.dt,
+  };
 
-    console.log(`Inserting data for city_id:${cityId}`, payload);
+  const { error } = await supabase
+    .from("weather_data")
+    .upsert([payload], { onConflict: "city_id,recorded_at" });
 
-    const { data: existing, error: selectError } = await supabase
-        .from("weather_data")
-        .select("id")
-        .eq("city_id", cityId)
-        .eq("recorded_at", payload.recorded_at);
+  if (error) throw new Error(`Supabase upsert error: ${error.message}`);
+  console.log(`Saved weather data for city_id: ${cityId}`, payload);
+}
 
-    if (selectError) {
-        console.error(`Select error for city_id:${cityId}`, selectError);
-        return;
-    }
+async function cleanupOldWeatherData() {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-    const result = existing && existing.length > 0
-        ? await supabase
-              .from("weather_data")
-              .update(payload)
-              .eq("city_id", cityId)
-              .eq("recorded_at", payload.recorded_at)
-        : await supabase.from("weather_data").insert([payload]);
+  const { error } = await supabase
+    .from("weather_data")
+    .delete()
+    .lt("recorded_at", oneWeekAgo.toISOString());
 
-    if (result.error) {
-        console.error(`Supabase error for city_id:${cityId}`, result.error);
-    } else {
-        console.log(`Weather data processed for city_id:${cityId}`);
-    }
-};
-
-/**
- * 1週間以上経過した気象データをSupabaseから削除する関数
- * @returns 削除されたレコード数
- */
-const cleanupOldWeatherData = async (): Promise<number> => {
-    try {
-        console.log("Cleaning up old weather data...");
-        
-        // 1週間前の日時を計算
-        const oneWeekAgo = new Date();
-        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-        const cutoffDate = oneWeekAgo.toISOString();
-        
-        console.log(`Deleting weather data older than: ${cutoffDate}`);
-        
-        // recorded_atがcutoffDateより古いレコードを削除
-        const { data, error, count } = await supabase
-            .from("weather_data")
-            .delete({ count: "exact" })
-            .lt("recorded_at", cutoffDate);
-            
-        if (error) {
-            throw new Error(`Failed to delete old weather data: ${error.message}`);
-        }
-        
-        console.log(`Successfully deleted ${count} old weather records`);
-        return count || 0;
-    } catch (error) {
-        console.error("Error cleaning up old weather data:", error);
-        return 0;
-    }
-};
+  if (error) throw new Error(`Supabase cleanup error: ${error.message}`);
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-    if (req.method !== "GET") {
-        return res.status(405).json({ message: "Method Not Allowed" });
+  if (req.method !== "GET") {
+    return res.status(405).json({ message: "Method Not Allowed" });
+  }
+
+  try {
+    // cities テーブルから全都市を取得
+    const { data: cities, error: citiesError } = await supabase
+      .from("cities")
+      .select("id, name, latitude, longitude");
+
+    if (citiesError) throw new Error(`Supabase cities fetch error: ${citiesError.message}`);
+    if (!cities?.length) {
+      return res.status(404).json({ message: "No cities found in cities table" });
     }
 
-    try {
-        console.log("Fetching cities from Supabase...");
-        const { data: cities, error: citiesError } = await supabase
-            .from("cities")
-            .select("id, latitude, longitude");
+    console.log(`Found ${cities.length} cities in the database`);
 
-        if (citiesError) {
-            throw new Error(`Failed to fetch cities: ${citiesError.message}`);
-        }
+    // 各都市の天気データを取得して保存
+    await Promise.all(
+      cities.map(async (city) => {
+        const weather = await fetchWeatherData(city.latitude, city.longitude);
+        await updateWeatherData(weather, city.id);
+      })
+    );
 
-        console.log("Cities fetched:", cities);
+    // 古いデータをクリーンアップ
+    await cleanupOldWeatherData();
 
-        if (!cities || cities.length === 0) {
-            return res.status(404).json({ message: "No cities found" });
-        }
-
-        const requests = cities.map(async (city) => {
-            const weather = await fetchWeatherData(city.latitude, city.longitude);
-            if (weather) {
-                await insertWeatherDataToSupabase(weather, city.id);
-            }
-        });
-
-        await Promise.all(requests);
-        
-        // 古いデータのクリーンアップを実行
-        const deletedCount = await cleanupOldWeatherData();
-        
-        res.status(200).json({ 
-            message: "Weather data fetched and stored successfully", 
-            maintenance: `${deletedCount} old records cleaned up`
-        });
-    } catch (error) {
-        console.error("Error in weather API:", error);
-        res.status(500).json({ message: "Internal Server Error" });
-    }
+    res.status(200).json({ message: `Weather data updated successfully for ${cities.length} cities` });
+  } catch (error) {
+    console.error("Fetch weather error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 }
