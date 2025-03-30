@@ -12,5 +12,5 @@ jobs:
         env:
           API_TOKEN: ${{ secrets.HOCHU_API_TOKEN }} #これは自身の環境で生成して(openssl rand -hex 16).env.localの中に格納
         run: |
-          curl -X GET "https://your-app.vercel.app/api/fetchWeather" \
+          curl -X GET "https://hochu-weather.vercel.app/api/fetchWeather" \
             -H "Authorization: Bearer $API_TOKEN"
