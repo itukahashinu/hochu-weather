@@ -7,12 +7,19 @@ if (typeof window !== 'undefined' && !window.ethereum) {
   window.ethereum = {
     selectedAddress: undefined,
     isMetaMask: false,
-    request: () => Promise.reject(new Error('MetaMask is not available')),
+    request: () => Promise.reject(new Error('MetaMask not found')),
     on: () => {},
     removeListener: () => {}
   };
 }
 
-export default function App({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />
+function App({ Component, pageProps }: AppProps) {
+  return (
+    <>
+      <Component {...pageProps} />
+      <SpeedInsights />
+    </>
+  )
 }
+
+export default App
